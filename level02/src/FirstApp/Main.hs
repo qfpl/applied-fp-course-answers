@@ -1,19 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 module FirstApp.Main (runApp) where
 
-import Network.Wai
-import Network.Wai.Handler.Warp (run)
+import           Network.Wai
+import           Network.Wai.Handler.Warp (run)
 
-import Network.HTTP.Types (Status, status200, status404, status400, hContentType)
+import           Network.HTTP.Types       (Status, hContentType, status200,
+                                           status400, status404)
 
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy     as LBS
 
-import Data.Either (either)
+import           Data.Either              (either)
 
-import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import           Data.Text                (Text)
+import           Data.Text.Encoding       (decodeUtf8)
 
-import FirstApp.Types
+import           FirstApp.Types
 
 runApp :: IO ()
 runApp = run 3000 app
@@ -28,22 +29,25 @@ mkResponse sts ct msg =
   responseLBS sts [(hContentType, renderContentType ct)] msg
 
 resp200
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp200 =
-  mkResponse status200 PlainText
+  mkResponse status200
 
 resp404
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp404 =
-  mkResponse status404 PlainText
+  mkResponse status404
 
 resp400
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp400 =
-  mkResponse status400 PlainText
+  mkResponse status400
 -- |
 
 {-|
@@ -114,17 +118,8 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
-{-|
-HALP
-
-Alternative type sig:
-Either Error a
-
-But iirc this isn't as protected against being used in the wrong spot, since the `a`
-is polymorphic we could mess up and use this where we're trying to return a Topic.
--}
 mkUnknownRouteErr
-  :: Either Error RqType
+  :: Either Error a
 mkUnknownRouteErr =
   Left UnknownRoute
 
@@ -132,13 +127,11 @@ mkErrorResponse
   :: Error
   -> Response
 mkErrorResponse UnknownRoute =
-  resp404 "Unknown Route"
+  resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  resp400 "Empty Comment"
+  resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
-  resp400 "Empty Topic"
--- mkErrorResponse _ =
---   error "mkErrorResponse not implemented"
+  resp400 PlainText "Empty Topic"
 
 {-|
 We'll stub these for now as the general structure and the process of reaching
@@ -158,10 +151,8 @@ handleRequest
   :: RqType
   -> IO (Either Error Response)
 handleRequest (AddRq _ _) =
-  pure . Right $ resp200 "Fred wuz ere"
+  pure . Right $ resp200 PlainText "Fred wuz ere"
 handleRequest (ViewRq _) =
-  pure . Right $ resp200 "Susan was ere"
+  pure . Right $ resp200 PlainText "Susan was ere"
 handleRequest ListRq =
-  pure . Right $ resp200 "Fred wuz ere, Susan was ere"
--- handleRequest _ =
---   error "handleRequest not implemented"
+  pure . Right $ resp200 PlainText "Fred wuz ere, Susan was ere"

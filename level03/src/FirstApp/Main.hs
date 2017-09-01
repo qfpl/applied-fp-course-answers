@@ -15,7 +15,7 @@ import           Data.Monoid              ((<>))
 import           Data.Text                (Text)
 import           Data.Text.Encoding       (decodeUtf8)
 
-import qualified FirstApp.Conf as Conf
+import qualified FirstApp.Conf            as Conf
 import           FirstApp.Types
 
 runApp :: IO ()
@@ -37,22 +37,25 @@ mkResponse sts ct msg =
   responseLBS sts [(hContentType, renderContentType ct)] msg
 
 resp200
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp200 =
-  mkResponse status200 PlainText
+  mkResponse status200
 
 resp404
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp404 =
-  mkResponse status404 PlainText
+  mkResponse status404
 
 resp400
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp400 =
-  mkResponse status400 PlainText
+  mkResponse status400
 -- |
 
 -- Now that we have our configuration, pass it where it needs to go.
@@ -77,14 +80,14 @@ handleRequest
   -> RqType
   -> IO (Either Error Response)
 handleRequest cfg (AddRq _ _) =
-  pure . Right . resp200
+  pure . Right . resp200 PlainText
     . ( "App says: " <> )
     . Conf.getHelloMsg
     $ Conf.helloMsg cfg
 handleRequest _ (ViewRq _) =
-  pure . Right $ resp200 "Susan was ere"
+  pure . Right $ resp200 PlainText "Susan was ere"
 handleRequest _ ListRq =
-  pure . Right $ resp200 "[ \"Fred wuz ere\", \"Susan was ere\" ]"
+  pure . Right $ resp200 PlainText "[ \"Fred wuz ere\", \"Susan was ere\" ]"
 
 mkRequest
   :: Request
@@ -128,9 +131,9 @@ mkErrorResponse
   :: Error
   -> Response
 mkErrorResponse UnknownRoute =
-  resp404 "Unknown Route"
+  resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  resp400 "Empty Comment"
+  resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
-  resp400 "Empty Topic"
+  resp400 PlainText "Empty Topic"
 

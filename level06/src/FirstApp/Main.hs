@@ -53,7 +53,7 @@ runApp = do
       appWithDb env >> DB.closeDb (envDb env)
 
     appWithDb env =
-      run ( Conf.getPort . Conf.port $ envConfig env) (app env)
+      run ( (Conf.getPort . Conf.port . envConfig) env) (app env)
 
 prepareAppReqs
   :: IO (Either StartUpError Env)
@@ -62,7 +62,7 @@ prepareAppReqs = do
   -- This is awkward because we need to initialise our DB using the config,
   -- which might have failed to be created for some reason, but our DB start up
   -- might have also failed for some reason. This is a bit clunky
-  dbE <- fmap join $ traverse initDB cfgE
+  dbE <- fmap join (traverse initDB cfgE)
   -- Wrap our values (if we have them) in our Env for use in other parts of our
   -- application. We do it this way so we can have access to the bits we need
   -- when starting up the full app or one for testing.
@@ -126,9 +126,12 @@ handleRequest rqType = do
   db <- asks envDb
   liftIO $ case rqType of
     -- Exercise: Could this be generalised to clean up the repetition ?
-    AddRq t c -> fmap (const ( Res.resp200 "Success" )) <$> DB.addCommentToTopic db t c
-    ViewRq t  -> fmap Res.resp200Json <$> DB.getComments db t
-    ListRq    -> fmap Res.resp200Json <$> DB.getTopics db
+    AddRq t c ->
+     Right ( Res.resp200 PlainText "Success" ) <$ DB.addCommentToTopic db t c
+    ViewRq t  ->
+      fmap Res.resp200Json <$> DB.getComments db t
+    ListRq    ->
+      fmap Res.resp200Json <$> DB.getTopics db
 
 mkRequest
   :: Request
@@ -139,13 +142,17 @@ mkRequest
 mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
     -- Commenting on a given topic
-    ( [t, "add"], "POST" ) -> liftIO $ mkAddRequest t <$> strictRequestBody rq
+    ( [t, "add"], "POST" ) ->
+      liftIO $ mkAddRequest t <$> strictRequestBody rq
     -- View the comments on a given topic
-    ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
+    ( [t, "view"], "GET" ) ->
+      pure ( mkViewRequest t )
     -- List the current topics
-    ( ["list"], "GET" )    -> pure mkListRequest
+    ( ["list"], "GET" )    ->
+      pure mkListRequest
     -- Finally we don't care about any other requests so throw your hands in the air
-    _                      -> pure mkUnknownRouteErr
+    _                      ->
+      pure mkUnknownRouteErr
 
 mkAddRequest
   :: Text
@@ -167,20 +174,23 @@ mkListRequest =
   Right ListRq
 
 mkUnknownRouteErr
-  :: Either Error RqType
+  :: Either Error a
 mkUnknownRouteErr =
   Left UnknownRoute
 
 mkErrorResponse
   :: Error
   -> AppM Response
-mkErrorResponse UnknownRoute     = pure $ Res.resp404 "Unknown Route"
-mkErrorResponse EmptyCommentText = pure $ Res.resp400 "Empty Comment"
-mkErrorResponse EmptyTopic       = pure $ Res.resp400 "Empty Topic"
-mkErrorResponse ( DBError e )    = do
+mkErrorResponse UnknownRoute =
+  pure (Res.resp404 PlainText "Unknown Route")
+mkErrorResponse EmptyCommentText =
+  pure (Res.resp400 PlainText "Empty Comment")
+mkErrorResponse EmptyTopic =
+  pure (Res.resp400 PlainText "Empty Topic")
+mkErrorResponse ( DBError e ) = do
   -- As with our request for the FirstAppDB, we use the asks function from
   -- Control.Monad.Reader and pass the field accessor from the Env record.
-  rick <- asks loggingRick
-  rick . Text.pack $ show e
+  logFn <- asks envLoggingFn
+  _ <- (logFn . Text.pack . show) e
   -- Be a sensible developer and don't leak your DB errors over the interwebs.
-  pure $ Res.resp500 "OH NOES"
+  pure $ Res.resp500 PlainText "OH NOES"

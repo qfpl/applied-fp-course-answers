@@ -25,7 +25,7 @@ import           FirstApp.DB            (FirstAppDB)
 -- just values!
 data Env = Env
   -- Add the type signature of a very general "logging" function.
-  { loggingRick :: Text -> AppM ()
+  { envLoggingFn :: Text -> AppM ()
   , envConfig   :: Conf
   , envDb       :: FirstAppDB
   }

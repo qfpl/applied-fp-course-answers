@@ -3,17 +3,17 @@ module FirstApp.Types
   ( Error (..)
   , RqType (..)
   , ContentType (..)
-  -- Exporting newtypes like this will hide the constructor.
-  , Topic (getTopic)
-  , CommentText (getCommentText)
-  -- We provide specific constructor functions.
+  , Topic
+  , CommentText
   , mkTopic
+  , getTopic
   , mkCommentText
+  , getCommentText
   , renderContentType
   )where
 
-import Data.Text (Text)
-import Data.ByteString (ByteString)
+import           Data.ByteString (ByteString)
+import           Data.Text       (Text)
 
 {-|
 In Haskell the `newtype` comes with zero runtime cost. It is purely used for
@@ -23,12 +23,10 @@ even [a], you can wrap it up in a `newtype` for clarity.
 The type system will check it for you, and the compiler will eliminate the cost
 once it has passed.
 -}
-newtype Topic = Topic
-  { getTopic :: Text }
+newtype Topic = Topic Text
   deriving Show
 
-newtype CommentText = CommentText
-  { getCommentText :: Text }
+newtype CommentText = CommentText Text
   deriving Show
 
 -- Having specialised constructor functions for the newtypes allows you to set
@@ -41,6 +39,12 @@ mkTopic "" =
 mkTopic ti =
   Right (Topic ti)
 
+getTopic
+  :: Topic
+  -> Text
+getTopic (Topic t) =
+  t
+
 mkCommentText
   :: Text
   -> Either Error CommentText
@@ -49,6 +53,11 @@ mkCommentText "" =
 mkCommentText ct =
   Right (CommentText ct)
 
+getCommentText
+  :: CommentText
+  -> Text
+getCommentText (CommentText t) =
+  t
 {-|
 Working through the specification for our application, what are the
 types of requests we're going to handle?

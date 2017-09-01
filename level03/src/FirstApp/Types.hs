@@ -4,11 +4,13 @@ module FirstApp.Types
   , RqType (..)
   , ContentType (..)
   -- Exporting newtypes like this will hide the constructor.
-  , Topic (getTopic)
-  , CommentText (getCommentText)
+  , Topic
+  , CommentText
   -- We provide specific constructor functions.
   , mkTopic
+  , getTopic
   , mkCommentText
+  , getCommentText
   , renderContentType
   )where
 
@@ -23,12 +25,10 @@ even [a], you can wrap it up in a `newtype` for clarity.
 The type system will check it for you, and the compiler will eliminate the cost
 once it has passed.
 -}
-newtype Topic = Topic
-  { getTopic :: Text }
+newtype Topic = Topic Text
   deriving Show
 
-newtype CommentText = CommentText
-  { getCommentText :: Text }
+newtype CommentText = CommentText Text
   deriving Show
 
 -- Having specialised constructor functions for the newtypes allows you to set
@@ -41,6 +41,12 @@ mkTopic "" =
 mkTopic ti =
   Right (Topic ti)
 
+getTopic
+  :: Topic
+  -> Text
+getTopic (Topic t) =
+  t
+
 mkCommentText
   :: Text
   -> Either Error CommentText
@@ -48,6 +54,12 @@ mkCommentText "" =
   Left EmptyCommentText
 mkCommentText ct =
   Right (CommentText ct)
+
+getCommentText
+  :: CommentText
+  -> Text
+getCommentText (CommentText t) =
+  t
 
 {-|
 Working through the specification for our application, what are the

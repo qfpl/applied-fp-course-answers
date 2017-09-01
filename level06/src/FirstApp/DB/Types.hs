@@ -1,4 +1,4 @@
-module FirstApp.Types.DB where
+module FirstApp.DB.Types where
 
 import           Data.Text                      (Text)
 import           Data.Time                      (UTCTime)
@@ -23,7 +23,7 @@ data DbComment = DbComment
 -- between different packages/databases.
 instance FromRow DbComment where
   fromRow = DbComment
-            -- field :: FromField a => RowParser a 
+            -- field :: FromField a => RowParser a
             <$> field
             <*> field
             <*> field

@@ -6,12 +6,14 @@ module FirstApp.Types
   , RqType (..)
   , ContentType (..)
   -- Exporting newtypes like this will hide the constructor.
-  , Topic (getTopic)
-  , CommentText (getCommentText)
+  , Topic
+  , CommentText
   , Comment (..)
   -- We provide specific constructor functions.
   , mkTopic
+  , getTopic
   , mkCommentText
+  , getCommentText
   , renderContentType
   , fromDbComment
   ) where
@@ -31,7 +33,7 @@ import qualified Data.Aeson.Types                   as A
 import           Data.Time                          (UTCTime)
 
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
-import           FirstApp.Types.DB                  (DbComment (..))
+import           FirstApp.DB.Types                  (DbComment (..))
 
 {-|
 In Haskell the `newtype` comes with zero runtime cost. It is purely used for
@@ -44,10 +46,10 @@ once it has passed.
 newtype CommentId = CommentId Int
   deriving (Show, ToJSON)
 
-newtype Topic = Topic { getTopic :: Text }
+newtype Topic = Topic Text
   deriving (Show, ToJSON)
 
-newtype CommentText = CommentText { getCommentText :: Text }
+newtype CommentText = CommentText Text
   deriving (Show, ToJSON)
 
 -- This is our comment record that we will be sending to users, it's a simple
@@ -113,11 +115,23 @@ mkTopic
 mkTopic =
   nonEmptyText Topic EmptyTopic
 
+getTopic
+  :: Topic
+  -> Text
+getTopic (Topic t) =
+  t
+
 mkCommentText
   :: Text
   -> Either Error CommentText
 mkCommentText =
   nonEmptyText CommentText EmptyCommentText
+
+getCommentText
+  :: CommentText
+  -> Text
+getCommentText (CommentText t) =
+  t
 
 data RqType
   = AddRq Topic CommentText

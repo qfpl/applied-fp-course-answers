@@ -66,7 +66,7 @@ prepareAppReqs
 prepareAppReqs = runExceptT $ do
   cfg <- initConf
   db <- initDB cfg
-  pure $ Env cfg db
+  pure (Env cfg db)
   where
     toStartUpErr e =
       ExceptT . fmap (first e)
@@ -95,7 +95,7 @@ app env rq cb = do
       mkRequest rq >>= handleRequest
 
     handleError e = do
-      _ <- logToErr $ Text.pack (show e)
+      _ <- (logToErr . Text.pack . show) e
       pure $ mkErrorResponse e
 
 -- This function has changed quite a bit since we changed our DB functions to be
@@ -108,7 +108,7 @@ handleRequest ( AddRq t c ) =
   -- We've cleaned this branch up a bit more by dropping our use of `const` as
   -- we can use the Functor operator that ignores the result on the right hand
   -- side and returns the result of the function on the left.
-  Res.resp200 "Success" <$  DB.addCommentToTopic t c
+  Res.resp200 PlainText "Success" <$ DB.addCommentToTopic t c
 handleRequest ( ViewRq t )  =
   Res.resp200Json       <$> DB.getComments t
 handleRequest ListRq        =
@@ -120,13 +120,17 @@ mkRequest
 mkRequest rq =
   throwL =<< case ( pathInfo rq, requestMethod rq ) of
   -- Commenting on a given topic
-  ( [t, "add"], "POST" ) -> liftIO $ mkAddRequest t <$> strictRequestBody rq
+  ( [t, "add"], "POST" ) ->
+    liftIO (mkAddRequest t <$> strictRequestBody rq)
     -- View the comments on a given topic
-  ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
+  ( [t, "view"], "GET" ) ->
+    pure ( mkViewRequest t )
   -- List the current topics
-  ( ["list"], "GET" )    -> pure mkListRequest
+  ( ["list"], "GET" )    ->
+    pure mkListRequest
   -- We don't care about any other requests so throw your hands in the air
-  _                      -> pure mkUnknownRouteErr
+  _                      ->
+    pure mkUnknownRouteErr
 
 mkAddRequest
   :: Text
@@ -134,8 +138,7 @@ mkAddRequest
   -> Either Error RqType
 mkAddRequest ti c = AddRq
   <$> mkTopic ti
-  -- Got string types...
-  <*> (mkCommentText . decodeUtf8 $ LBS.toStrict c)
+  <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
 
 mkViewRequest
   :: Text
@@ -149,15 +152,19 @@ mkListRequest =
   Right ListRq
 
 mkUnknownRouteErr
-  :: Either Error RqType
+  :: Either Error a
 mkUnknownRouteErr =
   Left UnknownRoute
 
 mkErrorResponse
   :: Error
   -> Response
-mkErrorResponse UnknownRoute     = Res.resp404 "Unknown Route"
-mkErrorResponse EmptyCommentText = Res.resp400 "Empty Comment"
-mkErrorResponse EmptyTopic       = Res.resp400 "Empty Topic"
-mkErrorResponse ( DBError _ )    = Res.resp500 "OH NOES"
+mkErrorResponse UnknownRoute     =
+  Res.resp404 PlainText "Unknown Route"
+mkErrorResponse EmptyCommentText =
+  Res.resp400 PlainText "Empty Comment"
+mkErrorResponse EmptyTopic       =
+  Res.resp400 PlainText "Empty Topic"
+mkErrorResponse ( DBError _ )    =
+  Res.resp500 PlainText "OH NOES"
 

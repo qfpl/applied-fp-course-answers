@@ -1,16 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module FirstApp.Main (runApp) where
 
-import Network.Wai
-import Network.Wai.Handler.Warp (run)
+import           Network.Wai
+import           Network.Wai.Handler.Warp (run)
 
-import Network.HTTP.Types (status200)
-
-{-|
-This is about as basic as it gets.
--}
-runApp :: IO ()
-runApp = run 3000 app
+import           Network.HTTP.Types       (status200)
 
 {-|
 Our "application" will simply respond to ALL incoming requests with a 200 status
@@ -34,3 +28,9 @@ app _ cb =
       message = "Hello, World!"
   in
     cb $ responseLBS status200 headers message
+
+{-|
+This is about as basic as it gets.
+-}
+runApp :: IO ()
+runApp = run 3000 app

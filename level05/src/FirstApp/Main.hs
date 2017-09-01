@@ -55,7 +55,7 @@ runApp = do
     appWithDb cfg db =
       -- Just a helper to actually use the Wai function to run out fully
       -- realised app function.
-      run ( Conf.getPort $ Conf.port cfg ) $ app cfg db
+      run ( (Conf.getPort . Conf.port) cfg ) (app cfg db)
 
 prepareAppReqs
   :: IO (Either StartUpError (Conf.Conf,DB.FirstAppDB))
@@ -64,7 +64,7 @@ prepareAppReqs = do
   -- This is awkward because we need to initialise our DB using the config,
   -- which might have failed to be created for some reason, but our DB start up
   -- might have also failed for some reason. This is a bit clunky
-  dbE <- fmap join $ traverse initDB cfgE
+  dbE <- fmap join (traverse initDB cfgE)
   -- Wrap our values (if we have them) in a tuple for use in other parts of our
   -- application. We do it this way so we can have access to the bits we need
   -- when starting up the full app or one for testing.
@@ -94,29 +94,33 @@ mkResponse sts ct msg =
   responseLBS sts [(hContentType, renderContentType ct)] msg
 
 resp200
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp200 =
-  mkResponse status200 PlainText
+  mkResponse status200
 
 resp404
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp404 =
-  mkResponse status404 PlainText
+  mkResponse status404
 
 resp400
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp400 =
-  mkResponse status400 PlainText
+  mkResponse status400
 
 -- Some new helpers for different statuses and content types
 resp500
-  :: LBS.ByteString
+  :: ContentType
+  -> LBS.ByteString
   -> Response
 resp500 =
-  mkResponse status500 PlainText
+  mkResponse status500
 
 resp200Json
   :: ToJSON a
@@ -154,7 +158,7 @@ handleRequest
 -- reduce the function you need to write with the application of abstractions
 -- you already know, no custom functions.
 handleRequest _ db (AddRq t c) =
-  fmap (const ( resp200 "Success" )) <$> DB.addCommentToTopic db t c
+  Right ( resp200 PlainText "Success" ) <$ DB.addCommentToTopic db t c
 handleRequest _ db (ViewRq t) =
   fmap resp200Json <$> DB.getComments db t
 handleRequest _ db ListRq =
@@ -166,13 +170,17 @@ mkRequest
 mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
     -- Commenting on a given topic
-    ( [t, "add"], "POST" ) -> mkAddRequest t <$> strictRequestBody rq
+    ( [t, "add"], "POST" ) ->
+      mkAddRequest t <$> strictRequestBody rq
     -- View the comments on a given topic
-    ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
+    ( [t, "view"], "GET" ) ->
+      pure ( mkViewRequest t )
     -- List the current topics
-    ( ["list"], "GET" )    -> pure mkListRequest
+    ( ["list"], "GET" )    ->
+      pure mkListRequest
     -- Finally we don't care about any other requests so throw your hands in the air
-    _                      -> pure mkUnknownRouteErr
+    _                      ->
+      pure mkUnknownRouteErr
 
 mkAddRequest
   :: Text
@@ -202,12 +210,12 @@ mkErrorResponse
   :: Error
   -> Response
 mkErrorResponse UnknownRoute =
-  resp404 "Unknown Route"
+  resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  resp400 "Empty Comment"
+  resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
-  resp400 "Empty Topic"
+  resp400 PlainText "Empty Topic"
 mkErrorResponse ( DBError e ) =
   -- If a DB error happens, it's going to be sad town, population you. But you
   -- should let someone know. How we go about changing this function to include logging ?
-  resp500 . LBS.pack $ "Database Error" <> show e
+  resp500 PlainText . LBS.pack $ "Database Error" <> show e
