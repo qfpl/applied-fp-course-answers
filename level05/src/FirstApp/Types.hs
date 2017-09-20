@@ -26,14 +26,14 @@ import           Data.Text                          (Text)
 import           Data.List                          (stripPrefix)
 import           Data.Maybe                         (fromMaybe)
 
-import           Data.Aeson                         (ToJSON (..))
+import           Data.Aeson                         (ToJSON (toEncoding))
 import qualified Data.Aeson                         as A
 import qualified Data.Aeson.Types                   as A
 
 import           Data.Time                          (UTCTime)
 
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
-import           FirstApp.DB.Types                  (DbComment (..))
+import           FirstApp.DB.Types                  (DbComment (dbCommentComment, dbCommentId, dbCommentTime, dbCommentTopic))
 
 {-|
 In Haskell the `newtype` comes with zero runtime cost. It is purely used for

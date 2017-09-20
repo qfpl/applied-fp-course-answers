@@ -8,10 +8,11 @@ module FirstApp.Conf
     , mkMessage
     ) where
 
-import           Control.Exception          (bracketOnError)
+import           Control.Exception          (catch)
 
-import           Data.Maybe                 (fromMaybe)
-import           Data.Monoid                (Last (..), Monoid (..), (<>))
+import           Data.Bifunctor             (first)
+import           Data.Monoid                (Last (Last, getLast),
+                                             Monoid (mappend, mempty), (<>))
 import           Data.String                (fromString)
 
 import           Data.ByteString.Lazy       (ByteString)
@@ -32,23 +33,21 @@ import           Options.Applicative        (Parser, ParserInfo, eitherReader,
 
 import           Text.Read                  (readEither)
 
-import           FirstApp.DB.Types                (Table (..))
+import           FirstApp.DB.Types          (Table (Table))
 
-{-|
-Similar to when we were considering what might go wrong with the RqTypes, lets
-think about might go wrong when trying to gather our configuration information.
--}
+-- Doctest setup section
+-- $setup
+-- >>> :set -XOverloadedStrings
+
 data ConfigError
   = MissingPort
   | MissingHelloMsg
   | MissingTableName
   | MissingDbFilePath
+  | JSONDecodeError String
+  | JSONFileReadError IOError
   deriving Show
 
-{-|
-As before, a bare Int or ByteString doesn't tell us anything about our intent,
-so lets wrap it up in a newtype.
--}
 newtype Port = Port
   { getPort :: Int }
   deriving Show
@@ -57,8 +56,6 @@ newtype HelloMsg = HelloMsg
   { getHelloMsg :: ByteString }
   deriving Show
 
--- This is a helper function to take a string and turn it into our HelloMsg
--- type.
 helloFromStr
   :: String
   -> HelloMsg
@@ -73,11 +70,6 @@ mkMessage =
   . getHelloMsg
   . helloMsg
 
-{-|
-This will be our configuration value, eventually it may contain more things
-but this will do for now. We will have a customisable port number, and a
-changeable message for our users.
--}
 data Conf = Conf
   { port       :: Port
   , helloMsg   :: HelloMsg
@@ -170,59 +162,75 @@ makeConfig pc = Conf
 -- This is the function we'll actually export for building our configuration.
 -- Since it wraps all our efforts to read information from the command line, and
 -- the file, before combining it all and returning the required information.
---
--- Additional Exercise: Rewrite this using applicative style.
 parseOptions
   :: FilePath
   -> IO (Either ConfigError Conf)
-parseOptions fp = do
-  fileConf <- parseJSONConfigFile fp
-  cmdLine  <- execParser commandLineParser
-  pure $ makeConfig (defaultConf <> fileConf <> cmdLine)
+parseOptions fp =
+  let mkCfg cli file = makeConfig (defaultConf <> file <> cli)
+  in do
+    cli' <- execParser commandLineParser
+    ( >>= mkCfg cli' ) <$> parseJSONConfigFile fp
 
 -- | File Parsing
 
--- Avoiding too many complications with selecting a configuration file package
--- from hackage. We'll use an encoding that you are probably familiar with, for
--- better or worse, and write a small parser to pull out the bits we need.
+-- | fromJsonObjWithKey
+-- >>> let (Just obj) = ( Aeson.decode "{\"foo\":\"Susan\"}" ) :: Maybe Aeson.Object
 --
--- Additional Exercise: Rewrite this without using Do notation, fmap should be sufficient.
+-- >>> fromJsonObjWithKey "foo" (id :: Text -> Text) obj
+-- Last {getLast = Just "Susan"}
+--
+-- >>> fromJsonObjWithKey "foo" id obj
+-- Last {getLast = Nothing}
+--
+fromJsonObjWithKey
+  :: FromJSON a
+  => Text
+  -> (a -> b)
+  -> Aeson.Object
+  -> Last b
+fromJsonObjWithKey k c obj =
+  Last ( c <$> Aeson.parseMaybe (Aeson..: k) obj )
+
+-- | decodeObj
+-- >>> decodeObj ""
+-- Left (JSONDecodeError "Error in $: not enough input")
+--
+-- >>> decodeObj "{\"bar\":33}"
+-- Right (fromList [("bar",Number 33.0)])
+--
+decodeObj
+  :: ByteString
+  -> Either ConfigError Aeson.Object
+decodeObj =
+  first JSONDecodeError . Aeson.eitherDecode
+
+-- | readObject
+-- >>> readObject "badFileName.no"
+-- Left (JSONFileReadError badFileName.no: openBinaryFile: does not exist (No such file or directory))
+--
+-- >>> readObject "test.json"
+-- Right "{\"foo\":33}\n"
+--
+readObject
+  :: FilePath
+  -> IO (Either ConfigError ByteString)
+readObject fp =
+  (Right <$> LBS.readFile fp) `catch` (pure . Left . JSONFileReadError)
+
 parseJSONConfigFile
   :: FilePath
-  -> IO PartialConf
-parseJSONConfigFile fp = do
-  fc <- readObject
-  pure . fromMaybe mempty $ toPartialConf <$> fc
+  -> IO ( Either ConfigError PartialConf )
+parseJSONConfigFile fp =
+  (>>= fmap toPartialConf . decodeObj) <$> readObject fp
   where
+    toPartialConf
+      :: Aeson.Object
+      -> PartialConf
     toPartialConf cObj = PartialConf
-      ( fromObj "port" Port cObj )
-      ( fromObj "helloMsg" helloFromStr cObj )
-      -- Pull the extra keys off the configuration file.
-      ( fromObj "tableName" Table cObj )
-      ( fromObj "dbFilePath" id cObj )
-
-    -- Parse out the keys from the object, maybe...
-    fromObj
-      :: FromJSON a
-      => Text
-      -> (a -> b)
-      -> Aeson.Object
-      -> Last b
-    fromObj k c obj =
-      -- Too weird ?
-      Last $ c <$> Aeson.parseMaybe (Aeson..: k) obj
-
-    -- Use bracket to save ourselves from horrible exceptions, which are
-    -- horrible.
-    --
-    -- Better ways to do this ?
-    readObject
-      :: IO (Maybe Aeson.Object)
-    readObject = bracketOnError
-      (LBS.readFile fp)
-      (const ( pure Nothing ))
-      (pure . Aeson.decode)
-
+      ( fromJsonObjWithKey "port" Port cObj )
+      ( fromJsonObjWithKey "helloMsg" helloFromStr cObj )
+      ( fromJsonObjWithKey "tableName" Table cObj )
+      ( fromJsonObjWithKey "dbFilePath" id cObj )
 -- | Command Line Parsing
 
 -- We will use the optparse-applicative package to build our command line

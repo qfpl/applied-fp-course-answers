@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module FirstApp.Main (runApp) where
 
-import           Network.Wai
+import           Network.Wai              (Application, responseLBS)
 import           Network.Wai.Handler.Warp (run)
 
 import           Network.HTTP.Types       (status200)
