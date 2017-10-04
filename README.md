@@ -2,6 +2,10 @@
 
 <img src="http://i.imgur.com/0h9dFhl.png" height="400" width="640" />
 
+## Special Note
+
+If you are looking for the Applied FP Course _exercises_ (not the answers), please go to https://github.com/data61/applied-fp-course
+
 ### You:
 
 * Have completed, or are capable of completing, the [Data61 FP Course](https://github.com/data61/fp-course).
