@@ -12,8 +12,8 @@ import           FirstApp.DB            (FirstAppDB)
 -- a ReaderT is a function from some 'r' to some 'm a' : (r -> m a). Whereby
 -- the 'r' is accessible to all functions that run in the context of that 'm'.
 --
--- This means that if you use the 'r' everywhere or simply enough throughout
--- your application, you no longer have to constantly weave the extra 'r' as an
+-- This means that if you use the 'r' everywhere or enough throughout your
+-- application, you no longer have to constantly weave the extra 'r' as an
 -- argument to everything that might need it.
 -- Since by definition:
 -- foo :: ReaderT r m a
@@ -21,17 +21,16 @@ import           FirstApp.DB            (FirstAppDB)
 -- foo :: r -> m a
 --
 -- First, let's clean up our (Conf,FirstAppDB) with an application Env type. We
--- will add a general purpose logging function, since we're not limited to
--- just values!
+-- will add a general purpose logging function as well
 data Env = Env
-  -- Add the type signature of a very general "logging" function.
   { envLoggingFn :: Text -> AppM ()
   , envConfig   :: Conf
   , envDb       :: FirstAppDB
   }
 
 -- Lets crack on and define a newtype wrapper for our ReaderT, this will save us
--- having to write out the full ReaderT definition for every function that uses it.
+-- having to write out the full ReaderT definition for every function that uses
+-- it.
 newtype AppM a = AppM
   -- Our ReaderT will only contain the Env, and our base monad will be IO, leave
   -- the return type polymorphic so that it will work regardless of what is
@@ -39,14 +38,16 @@ newtype AppM a = AppM
   -- addition to the useful type system) means that it is harder to use a
   -- different ReaderT when we meant to use our own, or vice versa. In such a
   -- situation it is extremely unlikely the application would compile at all,
-  -- but the name differences alone make the confusion a little less likely.
-  { unAppM :: ReaderT Env IO a }
+  -- but the name differences alone make the confusion less likely.
+
   -- Because we're using a newtype, all of the instance definitions for ReaderT
   -- would normally not apply. However, because we've done nothing but create a
-  -- convenience wrapper for our ReaderT, there is an extension for Haskell that
-  -- allows it to simply extend all the existing instances to work without AppM.
-  -- Add the GeneralizedNewtypeDeriving pragma to the top of the file and these
-  -- all work without any extra effort.
+  -- convenience wrapper for our ReaderT, it is not difficult for GHC to
+  -- automatically derive instances on our behalf.
+
+  -- With the 'GeneralizedNewtypeDeriving' pragma at the top of the file, we
+  -- will be able to derive these instances automatically.
+  { unAppM :: ReaderT Env IO a }
   deriving ( Functor
            , Applicative
            , Monad
@@ -54,24 +55,23 @@ newtype AppM a = AppM
            , MonadIO
            )
 
--- This a helper function that will take the requirements for our ReaderT, an
--- Env, and the (AppM a) that is the context/action to be run with the given Env.
---
--- First step is to unwrap our AppM, the newtype definition we wrote gives us
+-- Below is a helper function that will take the requirements for our ReaderT,
+-- an Env, and the (AppM a) that is the action to be run with the given Env.
+
+-- Our AppM must first be 'unwrapped', the newtype definition we wrote gives us
 -- that function:
--- unAppM :: AppM a -> ReaderT Env IO a
+-- > unAppM :: AppM a -> ReaderT Env IO a
 --
--- Then we run the ReaderT, which itself is just a newtype to get access to the
--- action we're going to evaluate:
--- runReaderT :: ReaderT r m a -> r -> m a
+-- Then we run the ReaderT, using:
+-- > runReaderT :: ReaderT r m a -> r -> m a
 -- ~
--- runReaderT :: ReaderT Env IO a -> Env -> IO a
+-- > runReaderT :: ReaderT Env IO a -> Env -> IO a
 --
--- Combining them (runReaderT . unAppM) we are left with:
--- Env -> IO a
+-- Composing them (runReaderT . unAppM) we are left with:
+-- > Env -> IO a
 --
 -- We have an Env so that leaves us with the:
--- IO a
+-- > IO a
 -- and we're done.
 runAppM
   :: Env

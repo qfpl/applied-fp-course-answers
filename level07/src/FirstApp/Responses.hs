@@ -9,7 +9,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 
 import           Data.Aeson                 (ToJSON)
 import qualified Data.Aeson                 as A
-import           FirstApp.Types             (ContentType (JSON),
+import           FirstApp.Types             (ContentType (JSON, PlainText),
                                              renderContentType)
 
 mkResponse
@@ -21,33 +21,29 @@ mkResponse sts ct msg =
   responseLBS sts [(hContentType, renderContentType ct)] msg
 
 resp200
-  :: ContentType
-  -> LBS.ByteString
+  :: LBS.ByteString
   -> Response
 resp200 =
-  mkResponse status200
+  mkResponse status200 PlainText
 
 resp404
-  :: ContentType
-  -> LBS.ByteString
+  :: LBS.ByteString
   -> Response
 resp404 =
-  mkResponse status404
+  mkResponse status404 PlainText
 
 resp400
-  :: ContentType
-  -> LBS.ByteString
+  :: LBS.ByteString
   -> Response
 resp400 =
-  mkResponse status400
+  mkResponse status400 PlainText
 
 -- Some new helpers for different statuses and content types
 resp500
-  :: ContentType
-  -> LBS.ByteString
+  :: LBS.ByteString
   -> Response
 resp500 =
-  mkResponse status500
+  mkResponse status500 PlainText
 
 resp200Json
   :: ToJSON a

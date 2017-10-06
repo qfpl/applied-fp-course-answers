@@ -54,4 +54,4 @@ resp200Json
   => a
   -> Response
 resp200Json =
-  mkResponse status200 JSON . A.encode
+  resp200 JSON . A.encode

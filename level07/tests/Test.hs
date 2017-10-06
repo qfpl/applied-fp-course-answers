@@ -19,7 +19,7 @@ main :: IO ()
 main = do
   let dieWith m = print m >> Exit.exitFailure
 
-      -- This just helps keep the string polymorphic so we can use it in both
+      -- This helps keep the string polymorphic so we can use it in both
       -- ByteString and Text forms in this file, without having to run encoding
       -- functions. The compiler takes care of it for us.
       testTopic :: IsString s => s
@@ -39,10 +39,9 @@ main = do
           flushTopic = do
             -- To lift our AppM into the base IO, we run it as would if it were
             -- a normal AppM, returning our IO ( Either ) result.
-            r <- AppM.runAppM env $ do
+            r <- AppM.runAppM env $
               -- This inner 'do' is running as if it were an AppM, including all of the nice error handling etc.
-              t <- AppM.throwL $ Types.mkTopic testTopic
-              DB.deleteTopic t
+              AppM.throwL (Types.mkTopic testTopic) >>= DB.deleteTopic
             -- This outer 'do' is in the base IO monad and if we have a failure
             -- here we need to exit with an error code to ensure the test-suite
             -- knows to fail our tests.

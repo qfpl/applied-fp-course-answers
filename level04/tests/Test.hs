@@ -19,8 +19,8 @@ main = do
   case cfgE of
 
     Left err -> do
-      -- Die loudly if the config couldn't be loaded, ensuring we exit with a
-      -- failure code to trip up anything that might be watching out run status.
+      -- Die loudly if the config couldn't be loaded. Ensure we exit with a
+      -- failure code to trip up anything that might be watching our run status.
       print err
       Exit.exitFailure
 

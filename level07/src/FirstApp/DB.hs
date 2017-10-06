@@ -1,5 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE OverloadedStrings #-}
 module FirstApp.DB
   ( Table (..)
   , FirstAppDB (FirstAppDB)
@@ -28,7 +27,7 @@ import qualified Database.SQLite.SimpleErrors       as Sql
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
 import           FirstApp.DB.Types                  (FirstAppDB (FirstAppDB, dbConn, dbTable),
-                                                     Table (getTableName))
+                                                     Table (Table, getTableName))
 import           FirstApp.Error                     (Error (DBError))
 import           FirstApp.Types                     (Comment, CommentText,
                                                      Topic, fromDbComment,
@@ -37,6 +36,10 @@ import           FirstApp.Types                     (Comment, CommentText,
 
 import           FirstApp.AppM                      (AppM, envDb, throwL)
 
+-- Doctest setup section
+-- $setup
+-- >>> :set -XOverloadedStrings
+
 -- Quick helper to pull the connection and close it down.
 closeDb
   :: FirstAppDB
@@ -44,18 +47,26 @@ closeDb
 closeDb =
   Sql.close . dbConn
 
--- Due to the way our application is designed, we have a slight SQL injection
--- risk because we pull the table name from the config or input arguments. This
--- attempts to mitigate that somewhat by removing the need for repetitive string
--- mangling when building our queries. We simply write the query and pass it
--- through this function that requires the Table information and everything is
--- taken care of for us. This is probably not the way to do things in a large
--- scale app.
+-- Because our `Table` is a configurable value, this application has a SQL
+-- injection vulnerability. That being said, in order to leverage this weakness,
+-- your appconfig.json file must be compromised and your app restarted. If that
+-- is capable of happening courtesy of a hostile actor, there are larger issues.
+
+-- Complete the withTable function so that the placeholder '$$tablename$$' is
+-- found and replaced in the provided Query.
+-- | withTable
+-- >>> withTable (Table "tbl_nm") "SELECT * FROM $$tablename$$"
+-- "SELECT * FROM tbl_nm"
+-- >>> withTable (Table "tbl_nm") "SELECT * FROM foo"
+-- "SELECT * FROM foo"
+-- >>> withTable (Table "tbl_nm") ""
+-- ""
 withTable
   :: Table
   -> Query
   -> Query
 withTable t = Sql.Query
+  -- This '$$foo$$' is our own made up placeholder value, it is not part of the Query type.
   . Text.replace "$$tablename$$" (getTableName t)
   . fromQuery
 
@@ -82,9 +93,9 @@ initDb fp tab = Sql.runDBAction $ do
   _ <- Sql.execute_ con createTableQ
   pure $ FirstAppDB con tab
   where
-  -- Query has a IsString instance so you can write straight strings like this
-  -- and it will convert them into a Query type, use '?' as placeholders for
-  -- ORDER DEPENDENT interpolation.
+  -- Query has an `IsString` instance so string literals like this can be
+  -- converted into a `Query` type when the `OverloadedStrings` language
+  -- extension is enabled.
     createTableQ = withTable tab
       "CREATE TABLE IF NOT EXISTS $$tablename$$ (id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time INTEGER)"
 
@@ -97,7 +108,7 @@ runDb a = do
   -- convert it into an `m (Either Error a)` so that it matches the requirements
   -- to be in our AppM, we then lean on the ExceptT functionality and use our
   -- helper to either `throwError` with any DB errors that have made it this far
-  -- or simply return the desired value.
+  -- or return the desired value.
   liftDb db >>= throwL
   -- Or alternatively, if you hate variables...
   -- asks (dbConn.envDb) >>= ( liftDb >=> throwL )

@@ -4,11 +4,14 @@ module FirstApp.Conf
     , Port (getPort)
     , HelloMsg (getHelloMsg)
     , parseOptions
+    , confPortToWai
     ) where
 
 import           Control.Exception          (catch)
 
 import           Data.Bifunctor             (first)
+import           GHC.Word                   (Word16)
+
 import           Data.Monoid                (Last (Last, getLast),
                                              Monoid (mappend, mempty), (<>))
 import           Data.String                (fromString)
@@ -34,19 +37,31 @@ import           Text.Read                  (readEither)
 -- $setup
 -- >>> :set -XOverloadedStrings
 
+newtype Port = Port
+  { getPort :: Word16 }
+  deriving (Eq, Show)
+
+newtype HelloMsg = HelloMsg
+  { getHelloMsg :: ByteString }
+  deriving (Eq,Show)
+
+-- We're storing our Port as a Word16 to be more precise and prevent invalid
+-- values from being used in our application. However Wai is not so stringent.
+-- To accommodate this and make our lives a bit easier, we will write this
+-- helper function to take ``Conf`` value and convert it to an ``Int``.
+confPortToWai
+  :: Conf
+  -> Int
+confPortToWai =
+  fromIntegral . getPort . port
+
+-- Similar to when we were considering our application types, leave this empty
+-- for now and add to it as you go.
 data ConfigError
   = MissingPort
   | MissingHelloMsg
   | JSONFileReadError IOError
   | JSONDecodeError String
-  deriving Show
-
-newtype Port = Port
-  { getPort :: Int }
-  deriving Show
-
-newtype HelloMsg = HelloMsg
-  { getHelloMsg :: ByteString }
   deriving Show
 
 helloFromStr
@@ -63,47 +78,43 @@ data Conf = Conf
   , helloMsg :: HelloMsg
   }
 
-{-|
-Our application will be able to have configuration from both a file and from
-command line input. We can use the command line to temporarily override the
-configuration from our file. But how to combine them? This question will help us
-find which abstraction is correct for our needs...
+-- Our application will be able to have configuration from both a file and from
+-- command line input. We can use the command line to temporarily override the
+-- configuration from our file. But how to combine them? This question will help us
+-- find which abstraction is correct for our needs...
 
-We want the CommandLine configuration to override the File configuration, so if
-we think about combining each of our config records, we want to be able to write
-something like this:
+-- We want the CommandLine configuration to override the File configuration, so if
+-- we think about combining each of our config records, we want to be able to write
+-- something like this:
 
-defaults <> file <> commandLine
+-- defaults <> file <> commandLine
 
-The commandLine should override any options it has input for.
+-- The commandLine should override any options it has input for.
 
-We can use the Monoid typeclass to handle combining the config records together,
-and the Last newtype to wrap up our values. The Last newtype is a wrapper for
-Maybe that when used with its Monoid instance will always preference the last
-Just value that it has:
+-- We can use the Monoid typeclass to handle combining the config records together,
+-- and the Last newtype to wrap up our values. The Last newtype is a wrapper for
+-- Maybe that when used with its Monoid instance will always preference the last
+-- Just value that it has:
 
-Last (Just 3) <> Last (Just 1) = Last (Just 1)
-Last Nothing  <> Last (Just 1) = Last (Just 1)
-Last (Just 1) <> Last Nothing  = Last (Just 1)
+-- Last (Just 3) <> Last (Just 1) = Last (Just 1)
+-- Last Nothing  <> Last (Just 1) = Last (Just 1)
+-- Last (Just 1) <> Last Nothing  = Last (Just 1)
 
-To make this easier, we'll make a new record PartialConf that will have our Last
-wrapped values. We can then define a Monoid instance for it and have our Conf be
-a known good configuration.
--}
+-- To make this easier, we'll make a new record PartialConf that will have our Last
+-- wrapped values. We can then define a Monoid instance for it and have our Conf be
+-- a known good configuration.
 data PartialConf = PartialConf
   { pcPort     :: Last Port
   , pcHelloMsg :: Last HelloMsg
   }
 
-{-|
-We now define our Monoid instance for PartialConf. Allowing us to define our
-always empty configuration, which would always fail our requirements. More
-interestingly, we define our mappend function to lean on the Monoid instance for
-Last to always get the last value.
+-- We now define our Monoid instance for PartialConf. Allowing us to define our
+-- always empty configuration, which would always fail our requirements. More
+-- interestingly, we define our mappend function to lean on the Monoid instance for
+-- Last to always get the last value.
 
-Note that the types won't be able to completely save you here, if you mess up
-the ordering of your 'a' and 'b' you will not end up with the desired result.
--}
+-- Note that the types won't be able to completely save you here, if you mess up
+-- the ordering of your 'a' and 'b' you will not end up with the desired result.
 instance Monoid PartialConf where
   mempty = PartialConf mempty mempty
 
@@ -112,8 +123,9 @@ instance Monoid PartialConf where
     , pcHelloMsg = pcHelloMsg a <> pcHelloMsg b
     }
 
--- We have some sane defaults that we can always rely on, so define them using
--- our PartialConf.
+-- For the purposes of this application we will encode some default values to
+-- ensure that our application continues to function in the event of missing
+-- configuration values from either the file or command line inputs.
 defaultConf
   :: PartialConf
 defaultConf = PartialConf
@@ -121,8 +133,8 @@ defaultConf = PartialConf
   (pure (HelloMsg "World!"))
 
 -- We need something that will take our PartialConf and see if can finally build
--- a complete Conf record. Also we need to highlight any missing config values
--- by providing the relevant error.
+-- a complete ``Conf`` record. Also we need to highlight any missing values by
+-- providing the relevant error.
 makeConfig
   :: PartialConf
   -> Either ConfigError Conf
@@ -209,9 +221,13 @@ parseJSONConfigFile fp =
 
 -- | Command Line Parsing
 
--- We will use the optparse-applicative package to build our command line
--- parser, as this problem is fraught with silly dangers and we appreciate
--- someone else having eaten this gremlin on our behalf.
+-- We will use the ``optparse-applicative`` package to build our command line
+-- parser. As this particular problem is fraught with silly dangers and we
+-- appreciate someone else having eaten this gremlin on our behalf.
+
+-- You'll need to use the documentation for ``optparse-applicative`` to help you
+-- write these functions as we're relying on their API to produce the types we
+-- need. We've provided some of the less interesting boilerplate for you.
 commandLineParser
   :: ParserInfo PartialConf
 commandLineParser =
@@ -221,14 +237,14 @@ commandLineParser =
   in
     info (helper <*> partialConfParser) mods
 
--- Combine the smaller parsers into our larger PartialConf type.
+-- Combine the smaller parsers into our larger ``PartialConf`` type.
 partialConfParser
   :: Parser PartialConf
 partialConfParser = PartialConf
   <$> portParser
   <*> helloMsgParser
 
--- Parse the Port value off the command line args and into our Last wrapper.
+-- Parse the Port value off the command line args and into a Last wrapper.
 portParser
   :: Parser (Last Port)
 portParser =
@@ -241,12 +257,7 @@ portParser =
   in
     Last <$> optional (option portReader mods)
 
--- Parse the HelloMsg from the input string into our type and into a Last
--- wrapper.
---
--- Remember that newtypes have zero runtime cost, they are removed by the
--- compiler. So don't be concerned by the wrapping / unwrapping of them in your
--- code. They are there for the type system and you.
+-- Parse the HelloMsg from the input string into our type and into a Last wrapper.
 helloMsgParser
   :: Parser (Last HelloMsg)
 helloMsgParser =

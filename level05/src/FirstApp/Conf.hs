@@ -5,7 +5,7 @@ module FirstApp.Conf
     , Port (getPort)
     , HelloMsg (getHelloMsg)
     , parseOptions
-    , mkMessage
+    , confPortToWai
     ) where
 
 import           Control.Exception          (catch)
@@ -14,6 +14,7 @@ import           Data.Bifunctor             (first)
 import           Data.Monoid                (Last (Last, getLast),
                                              Monoid (mappend, mempty), (<>))
 import           Data.String                (fromString)
+import           GHC.Word                   (Word16)
 
 import           Data.ByteString.Lazy       (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -49,7 +50,7 @@ data ConfigError
   deriving Show
 
 newtype Port = Port
-  { getPort :: Int }
+  { getPort :: Word16 }
   deriving Show
 
 newtype HelloMsg = HelloMsg
@@ -62,14 +63,6 @@ helloFromStr
 helloFromStr =
   HelloMsg . fromString
 
-mkMessage
-  :: Conf
-  -> LBS.ByteString
-mkMessage =
-  mappend "App says: "
-  . getHelloMsg
-  . helloMsg
-
 data Conf = Conf
   { port       :: Port
   , helloMsg   :: HelloMsg
@@ -77,33 +70,12 @@ data Conf = Conf
   , dbFilePath :: FilePath
   }
 
-{-|
-Our application will be able to have configuration from both a file and from
-command line input. We can use the command line to temporarily override the
-configuration from our file. But how to combine them? This question will help us
-find which abstraction is correct for our needs...
+confPortToWai
+  :: Conf
+  -> Int
+confPortToWai =
+  fromIntegral . getPort . port
 
-We want the CommandLine configuration to override the File configuration, so if
-we think about combining each of our config records, we want to be able to write
-something like this:
-
-defaults <> file <> commandLine
-
-The commandLine should override any options it has input for.
-
-We can use the Monoid typeclass to handle combining the config records together,
-and the Last newtype to wrap up our values. The Last newtype is a wrapper for
-Maybe that when used with its Monoid instance will always preference the last
-Just value that it has:
-
-Last (Just 3) <> Last (Just 1) = Last (Just 1)
-Last Nothing  <> Last (Just 1) = Last (Just 1)
-Last (Just 1) <> Last Nothing  = Last (Just 1)
-
-To make this easier, we'll make a new record PartialConf that will have our Last
-wrapped values. We can then define a Monoid instance for it and have our Conf be
-a known good configuration.
--}
 data PartialConf = PartialConf
   { pcPort       :: Last Port
   , pcHelloMsg   :: Last HelloMsg
@@ -111,15 +83,8 @@ data PartialConf = PartialConf
   , pcDbFilePath :: Last FilePath
   }
 
-{-|
-We now define our Monoid instance for PartialConf. Allowing us to define our
-always empty configuration, which would always fail our requirements. More
-interestingly, we define our mappend function to lean on the Monoid instance for
-Last to always get the last value.
-
-Note that the types won't be able to completely save you here, if you mess up
-the ordering of your 'a' and 'b' you will not end up with the desired result.
--}
+-- Note that the types won't be able to completely save you here, if you mess up
+-- the ordering of your 'a' and 'b' you will not end up with the desired result.
 instance Monoid PartialConf where
   mempty = PartialConf mempty mempty mempty mempty
 
@@ -141,9 +106,6 @@ defaultConf = PartialConf
   (pure (Table "comments"))
   (pure "firstapp_db.db")
 
--- We need something that will take our PartialConf and see if can finally build
--- a complete Conf record. Also we need to highlight any missing config values
--- by providing the relevant error.
 makeConfig
   :: PartialConf
   -> Either ConfigError Conf
@@ -157,11 +119,8 @@ makeConfig pc = Conf
     -- sections. Sometimes the compiler might need a bit of help, or you would
     -- like to be explicit in your intentions.
     lastToEither e g =
-      maybe (Left e) Right . getLast $ g pc
+      (maybe (Left e) Right . getLast . g) pc
 
--- This is the function we'll actually export for building our configuration.
--- Since it wraps all our efforts to read information from the command line, and
--- the file, before combining it all and returning the required information.
 parseOptions
   :: FilePath
   -> IO (Either ConfigError Conf)
@@ -189,7 +148,7 @@ fromJsonObjWithKey
   -> Aeson.Object
   -> Last b
 fromJsonObjWithKey k c obj =
-  Last ( c <$> Aeson.parseMaybe (Aeson..: k) obj )
+  Last $ c <$> Aeson.parseMaybe (Aeson..: k) obj
 
 -- | decodeObj
 -- >>> decodeObj ""
@@ -234,9 +193,6 @@ parseJSONConfigFile fp =
 
 -- | Command Line Parsing
 
--- We will use the optparse-applicative package to build our command line
--- parser, as this problem is fraught with silly dangers and we appreciate
--- someone else having eaten this gremlin on our behalf.
 commandLineParser
   :: ParserInfo PartialConf
 commandLineParser =

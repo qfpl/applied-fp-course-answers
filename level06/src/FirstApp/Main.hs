@@ -45,9 +45,9 @@ import           FirstApp.Types                     (ContentType (JSON, PlainTex
 import           FirstApp.AppM                      (AppM, Env (Env, envConfig, envDb, envLoggingFn),
                                                      runAppM)
 
--- Our startup is becoming more complicated and could fail in new and
+-- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
--- single type so that we can deal with the entire startup process as a whole.
+-- single type so that we can deal with the entire start-up process as a whole.
 data StartUpError
   = ConfErr Conf.ConfigError
   | DbInitErr SQLiteResponse
@@ -62,7 +62,7 @@ runApp = do
       appWithDb env >> DB.closeDb (envDb env)
 
     appWithDb env =
-      run ( (Conf.getPort . Conf.port . envConfig) env) (app env)
+      run ( Conf.confPortToWai $ envConfig env ) (app env)
 
 prepareAppReqs
   :: IO (Either StartUpError Env)
@@ -79,18 +79,20 @@ prepareAppReqs = do
   where
     logToErr = liftIO . hPutStrLn stderr
 
-    toStartUpErr e =
-      -- This just makes it a bit easier to take our individual initialisation
-      -- functions and ensure that they both conform to the StartUpError type
-      -- that we want them too.
-      fmap (first e)
+    -- This makes it a bit easier to take our individual initialisation
+    -- functions and ensure that they both conform to the StartUpError type
+    -- that we want them too.
+    toStartUpErr =
+      fmap . first
 
-    initConf = toStartUpErr ConfErr
-      -- Prepare the configgening
+    initConf =
+      -- Prepare the config
+      toStartUpErr ConfErr
       $ Conf.parseOptions "appconfig.json"
 
-    initDB cfg = toStartUpErr DbInitErr
+    initDB cfg =
       -- Power up the tubes
+      toStartUpErr DbInitErr
       $ DB.initDb (Conf.dbFilePath cfg) (Conf.tableName cfg)
 
 app
@@ -127,7 +129,7 @@ handleRequest rqType = do
   -- &
   -- asks :: MonadReader r m => (r -> a) -> m a
   --
-  -- We will use asks here as we're only after the FirstAppDB, so...
+  -- We will use ``asks`` here as we only want the FirstAppDB, so...
   -- > envDb      :: Env -> FirstAppDB
   -- > AppM       :: ReaderT Env IO a
   -- > asks       :: (Env -> a) -> AppM a
@@ -152,7 +154,7 @@ mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
     -- Commenting on a given topic
     ( [t, "add"], "POST" ) ->
-      liftIO $ mkAddRequest t <$> strictRequestBody rq
+      liftIO (mkAddRequest t <$> strictRequestBody rq)
     -- View the comments on a given topic
     ( [t, "view"], "GET" ) ->
       pure ( mkViewRequest t )
@@ -161,7 +163,7 @@ mkRequest rq =
       pure mkListRequest
     -- Finally we don't care about any other requests so throw your hands in the air
     _                      ->
-      pure mkUnknownRouteErr
+      pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -169,7 +171,7 @@ mkAddRequest
   -> Either Error RqType
 mkAddRequest ti c = AddRq
   <$> mkTopic ti
-  <*> (mkCommentText . decodeUtf8 $ LBS.toStrict c)
+  <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
 
 mkViewRequest
   :: Text
@@ -182,24 +184,19 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
-mkUnknownRouteErr
-  :: Either Error a
-mkUnknownRouteErr =
-  Left UnknownRoute
-
 mkErrorResponse
   :: Error
   -> AppM Response
-mkErrorResponse UnknownRoute =
-  pure (Res.resp404 PlainText "Unknown Route")
+mkErrorResponse UnknownRoute     =
+  pure $ Res.resp404 PlainText "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  pure (Res.resp400 PlainText "Empty Comment")
-mkErrorResponse EmptyTopic =
-  pure (Res.resp400 PlainText "Empty Topic")
-mkErrorResponse ( DBError e ) = do
+  pure $ Res.resp400 PlainText "Empty Comment"
+mkErrorResponse EmptyTopic       =
+  pure $ Res.resp400 PlainText "Empty Topic"
+mkErrorResponse ( DBError e )    = do
   -- As with our request for the FirstAppDB, we use the asks function from
-  -- Control.Monad.Reader and pass the field accessor from the Env record.
-  logFn <- asks envLoggingFn
-  _ <- (logFn . Text.pack . show) e
-  -- Be a sensible developer and don't leak your DB errors over the interwebs.
-  pure $ Res.resp500 PlainText "OH NOES"
+  -- Control.Monad.Reader and pass the field accessors from the Env record.
+  rick <- asks envLoggingFn
+  _ <- (rick . Text.pack . show) e
+  -- Be a sensible developer and don't leak your DB errors over the internet.
+  pure (Res.resp500 PlainText "OH NOES")

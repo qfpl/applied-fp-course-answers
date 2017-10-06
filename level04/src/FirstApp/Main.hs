@@ -28,9 +28,9 @@ runApp = do
   cfgE <- Conf.parseOptions "appconfig.json"
   case cfgE of
     Left err  -> print err
-    Right cfg -> run ( Conf.getPort $ Conf.port cfg ) ( app cfg )
+    Right cfg -> run ( Conf.confPortToWai cfg ) ( app cfg )
 
--- | Just some helper functions to make our lives a little more DRY.
+-- | Some helper functions to make our lives a little more DRY.
 mkResponse
   :: Status
   -> ContentType
@@ -65,7 +65,7 @@ app
   :: Conf.Conf
   -> Application
 app cfg rq cb = mkRequest rq
-  >>= fmap handleRespErr . handleRErr
+  >>= fmap handleRespErr . pure . handleRErr
   >>= cb
   where
     -- Does this seem clunky to you?
@@ -73,18 +73,18 @@ app cfg rq cb = mkRequest rq
       either mkErrorResponse id
     -- Because it is clunky, and we have a better solution, later.
     handleRErr =
-      either ( pure . Left ) ( handleRequest cfg )
+      either  Left  ( handleRequest cfg )
 
 ok200Text
   :: LBS.ByteString
-  -> IO (Either e Response)
+  -> Either e Response
 ok200Text =
-  pure . Right . resp200 PlainText
+  Right . resp200 PlainText
 
 handleRequest
   :: Conf.Conf
   -> RqType
-  -> IO (Either Error Response)
+  -> Either Error Response
 handleRequest cfg (AddRq _ _) =
   ok200Text (Conf.mkMessage cfg)
 handleRequest _ (ViewRq _) =
@@ -108,7 +108,7 @@ mkRequest rq =
       pure mkListRequest
     -- Finally we don't care about any other requests so throw your hands in the air
     _                      ->
-      pure mkUnknownRouteErr
+      pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -128,11 +128,6 @@ mkListRequest
   :: Either Error RqType
 mkListRequest =
   Right ListRq
-
-mkUnknownRouteErr
-  :: Either Error a
-mkUnknownRouteErr =
-  Left UnknownRoute
 
 mkErrorResponse
   :: Error

@@ -21,7 +21,8 @@ import           Network.HTTP.Types                 (Status, hContentType,
 
 import qualified Data.ByteString.Lazy.Char8         as LBS
 
-import           Data.Either                        (Either (Left,Right), either)
+import           Data.Either                        (Either (Left, Right),
+                                                     either)
 
 import           Data.Semigroup                     ((<>))
 import           Data.Text                          (Text)
@@ -34,15 +35,15 @@ import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
 import qualified FirstApp.Conf                      as Conf
 import qualified FirstApp.DB                        as DB
-import           FirstApp.Types                     (ContentType (PlainText, JSON),
+import           FirstApp.Types                     (ContentType (JSON, PlainText),
                                                      Error (DBError, EmptyCommentText, EmptyTopic, UnknownRoute),
                                                      RqType (AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic,
                                                      renderContentType)
 
--- Our startup is becoming more complicated and could fail in new and
+-- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
--- single type so that we can deal with the entire startup process as a whole.
+-- single type so that we can deal with the entire start-up process as a whole.
 data StartUpError
   = ConfErr Conf.ConfigError
   | DbInitErr SQLiteResponse
@@ -62,7 +63,7 @@ runApp = do
     appWithDb cfg db =
       -- Just a helper to actually use the Wai function to run out fully
       -- realised app function.
-      run ( (Conf.getPort . Conf.port) cfg ) (app cfg db)
+      run ( Conf.confPortToWai cfg ) (app cfg db)
 
 prepareAppReqs
   :: IO (Either StartUpError (Conf.Conf,DB.FirstAppDB))
@@ -91,14 +92,14 @@ prepareAppReqs = do
       -- Power up the tubes
       $ DB.initDb (Conf.dbFilePath cfg) (Conf.tableName cfg)
 
--- | Just some helper functions to make our lives a little more DRY.
+-- | Some helper functions to make our lives a little more DRY.
 mkResponse
   :: Status
   -> ContentType
   -> LBS.ByteString
   -> Response
-mkResponse sts ct msg =
-  responseLBS sts [(hContentType, renderContentType ct)] msg
+mkResponse sts ct =
+  responseLBS sts [(hContentType, renderContentType ct)]
 
 resp200
   :: ContentType
@@ -143,7 +144,7 @@ app
   -> Application
 app cfg db rq cb = do
   rq' <- mkRequest rq
-  resp <- fmap handleRespErr $ handleRErr rq'
+  resp <- handleRespErr <$> handleRErr rq'
   cb resp
   where
     -- Does this seem clunky to you?
@@ -187,7 +188,7 @@ mkRequest rq =
       pure mkListRequest
     -- Finally we don't care about any other requests so throw your hands in the air
     _                      ->
-      pure mkUnknownRouteErr
+      pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -195,7 +196,7 @@ mkAddRequest
   -> Either Error RqType
 mkAddRequest ti c = AddRq
   <$> mkTopic ti
-  <*> (mkCommentText . decodeUtf8 $ LBS.toStrict c)
+  <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
 
 mkViewRequest
   :: Text
@@ -207,11 +208,6 @@ mkListRequest
   :: Either Error RqType
 mkListRequest =
   Right ListRq
-
-mkUnknownRouteErr
-  :: Either Error RqType
-mkUnknownRouteErr =
-  Left UnknownRoute
 
 mkErrorResponse
   :: Error

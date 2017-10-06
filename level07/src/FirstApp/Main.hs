@@ -41,9 +41,9 @@ import qualified FirstApp.Responses                 as Res
 import           FirstApp.Types                     (ContentType (PlainText), RqType (AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic)
 
--- Our startup process is becoming more complicated and could fail in new and
+-- Our start-up process is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
--- single type so that we can deal with the entire startup process as a whole.
+-- single type so that we can deal with the entire start-up process as a whole.
 data StartUpError
   = ConfErr Conf.ConfigError
   | DbInitErr SQLiteResponse
@@ -59,14 +59,14 @@ runApp = do
       appWithDb env >> DB.closeDb (envDb env)
 
     appWithDb env =
-      run ( Conf.getPort . Conf.port $ envConfig env ) (app env)
+      run ( Conf.confPortToWai $ envConfig env ) (app env)
 
 -- Monad transformers can be used without needing to write the newtype. Recall
 -- that the constructor for ExceptT has a type of :: m (Either e a). So if you
 -- have multiple functions that match that pattern and you don't want to have to
 -- thread the error handling needle yourself. You can apply the constructor to
 -- the functions and work directly on the values, knowing that the error
--- handling will work as expected. Then you simply `runExceptT` and produce the
+-- handling will work as expected. Then you `runExceptT` and produce the
 -- final Either value.
 prepareAppReqs
   :: IO (Either StartUpError Env)
@@ -98,11 +98,11 @@ app env rq cb = do
   where
     logToErr = liftIO . hPutStrLn stderr
 
-    requestToResponse = runAppM env $ do
+    requestToResponse = runAppM env $
       mkRequest rq >>= handleRequest
 
     handleError e = do
-      _ <- (logToErr . Text.pack . show) e
+      _ <- ( logToErr . Text.pack . show ) e
       pure $ mkErrorResponse e
 
 -- This function has changed quite a bit since we changed our DB functions to be
@@ -115,7 +115,7 @@ handleRequest ( AddRq t c ) =
   -- We've cleaned this branch up a bit more by dropping our use of `const` as
   -- we can use the Functor operator that ignores the result on the right hand
   -- side and returns the result of the function on the left.
-  Res.resp200 PlainText "Success" <$ DB.addCommentToTopic t c
+  Res.resp200 "Success" <$  DB.addCommentToTopic t c
 handleRequest ( ViewRq t )  =
   Res.resp200Json       <$> DB.getComments t
 handleRequest ListRq        =
@@ -128,7 +128,7 @@ mkRequest rq =
   throwL =<< case ( pathInfo rq, requestMethod rq ) of
   -- Commenting on a given topic
   ( [t, "add"], "POST" ) ->
-    liftIO (mkAddRequest t <$> strictRequestBody rq)
+    liftIO $ mkAddRequest t <$> strictRequestBody rq
     -- View the comments on a given topic
   ( [t, "view"], "GET" ) ->
     pure ( mkViewRequest t )
@@ -137,7 +137,7 @@ mkRequest rq =
     pure mkListRequest
   -- We don't care about any other requests so throw your hands in the air
   _                      ->
-    pure mkUnknownRouteErr
+    pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -158,20 +158,15 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
-mkUnknownRouteErr
-  :: Either Error a
-mkUnknownRouteErr =
-  Left UnknownRoute
-
 mkErrorResponse
   :: Error
   -> Response
 mkErrorResponse UnknownRoute     =
-  Res.resp404 PlainText "Unknown Route"
+  Res.resp404 "Unknown Route"
 mkErrorResponse EmptyCommentText =
-  Res.resp400 PlainText "Empty Comment"
+  Res.resp400 "Empty Comment"
 mkErrorResponse EmptyTopic       =
-  Res.resp400 PlainText "Empty Topic"
+  Res.resp400 "Empty Topic"
 mkErrorResponse ( DBError _ )    =
-  Res.resp500 PlainText "OH NOES"
+  Res.resp500 "OH NOES"
 

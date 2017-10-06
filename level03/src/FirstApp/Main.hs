@@ -31,16 +31,16 @@ runApp = do
   -- Loading the configuration can fail, so we have to take that into account now.
   case cfgE of
     Left err  -> print err
-    Right cfg -> run ( Conf.getPort $ Conf.port cfg ) ( app cfg )
+    Right cfg -> run ( Conf.confPortToWai cfg ) ( app cfg )
 
--- | Just some helper functions to make our lives a little more DRY.
+-- | Some helper functions to make our lives a little more DRY.
 mkResponse
   :: Status
   -> ContentType
   -> LBS.ByteString
   -> Response
-mkResponse sts ct msg =
-  responseLBS sts [(hContentType, renderContentType ct)] msg
+mkResponse sts ct =
+  responseLBS sts [(hContentType, renderContentType ct)]
 
 resp200
   :: ContentType
@@ -62,38 +62,35 @@ resp400
   -> Response
 resp400 =
   mkResponse status400
--- |
 
--- Now that we have our configuration, pass it where it needs to go.
 app
   :: Conf.Conf
   -> Application
-app cfg rq cb = mkRequest rq
-  >>= fmap handleRespErr . handleRErr
-  >>= cb
+app cfg rq cb =
+  (handleRespErr . handleRErr <$> mkRequest rq) >>= cb
   where
     -- Does this seem clunky to you?
     handleRespErr =
       either mkErrorResponse id
     -- Because it is clunky, and we have a better solution, later.
     handleRErr =
-      either ( pure . Left ) ( handleRequest cfg )
+      either Left ( handleRequest cfg )
 
--- Now we have some config, we can pull our configured helloMsg off it and use it
--- in the response.
+-- Now we have some config, we can pull the ``helloMsg`` off it and use it in
+-- the response.
 handleRequest
   :: Conf.Conf
   -> RqType
-  -> IO (Either Error Response)
+  -> Either Error Response
 handleRequest cfg (AddRq _ _) =
-  pure . Right . resp200 PlainText
+  Right . resp200 PlainText
     . ( "App says: " <> )
     . Conf.getHelloMsg
     $ Conf.helloMsg cfg
 handleRequest _ (ViewRq _) =
-  pure . Right $ resp200 PlainText "Susan was ere"
+  Right $ resp200 PlainText "Susan was ere"
 handleRequest _ ListRq =
-  pure . Right $ resp200 PlainText "[ \"Fred wuz ere\", \"Susan was ere\" ]"
+  Right $ resp200 PlainText "[ \"Fred wuz ere\", \"Susan was ere\" ]"
 
 mkRequest
   :: Request
@@ -101,13 +98,17 @@ mkRequest
 mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
     -- Commenting on a given topic
-    ( [t, "add"], "POST" ) -> mkAddRequest t <$> strictRequestBody rq
+    ( [t, "add"], "POST" ) ->
+      mkAddRequest t <$> strictRequestBody rq
     -- View the comments on a given topic
-    ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
+    ( [t, "view"], "GET" ) ->
+      pure ( mkViewRequest t )
     -- List the current topics
-    ( ["list"], "GET" )    -> pure mkListRequest
-    -- Finally we don't care about any other requests so throw your hands in the air
-    _                      -> pure mkUnknownRouteErr
+    ( ["list"], "GET" )    ->
+      pure mkListRequest
+    -- Finally we don't care about any other requests so build an Error response
+    _                      ->
+      pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -115,7 +116,7 @@ mkAddRequest
   -> Either Error RqType
 mkAddRequest ti c = AddRq
   <$> mkTopic ti
-  <*> (mkCommentText . decodeUtf8 $ LBS.toStrict c)
+  <*> (mkCommentText . decodeUtf8 . LBS.toStrict) c
 
 mkViewRequest
   :: Text
@@ -128,11 +129,6 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
-mkUnknownRouteErr
-  :: Either Error RqType
-mkUnknownRouteErr =
-  Left UnknownRoute
-
 mkErrorResponse
   :: Error
   -> Response
@@ -142,4 +138,3 @@ mkErrorResponse EmptyCommentText =
   resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
-

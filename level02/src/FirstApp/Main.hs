@@ -139,20 +139,19 @@ mkErrorResponse EmptyCommentText =
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
 
-{-|
-We'll stub these for now as the general structure and the process of reaching
-this stage is the more important lesson here.
 
-Notice how we're only accepting our predefined request types that have the required
-information already validated and prepared for use in the handling of the request.
+-- We'll stub these for now as the general structure and the process of reaching
+-- this stage is the more important lesson here.
 
-If we find that we need more information to handle a request, or we have a new
-type of request that we'd like to handle then we simply update the RqType structure
-and the compiler will let us know the affected portions of our application.
+-- Notice how we're only accepting our predefined request types that have the required
+-- information already validated and prepared for use in the handling of the request.
 
-Reduction of concerns such that each section of the application only deals with
-a small piece is one of the benefits of developing in this way.
--}
+-- If we find that we need more information to handle a request, or we have a new
+-- type of request that we'd like to handle then we simply update the RqType structure
+-- and the compiler will let us know the affected portions of our application.
+
+-- Reduction of concerns such that each section of the application only deals with
+-- a small piece is one of the benefits of developing in this way.
 handleRequest
   :: RqType
   -> IO (Either Error Response)
