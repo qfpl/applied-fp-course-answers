@@ -1,6 +1,6 @@
 # Applied Functional Programming Course
 
-<img src="http://i.imgur.com/0h9dFhl.png" height="400" width="640" />
+![CSIRO's Data61 Logo](https://raw.githubusercontent.com/qfpl/assets/master/data61-transparent-bg.png)
 
 ## Special Note
 
